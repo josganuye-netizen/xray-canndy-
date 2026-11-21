@@ -7,5 +7,5 @@ RUN mkdir -p /etc/xray /etc/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY config.json /etc/xray/config.json
 COPY start.sh /start.sh
-RUN chmod +x /start.sh && caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+RUN chmod +x /start.sh
 CMD ["/bin/sh", "/start.sh"]
