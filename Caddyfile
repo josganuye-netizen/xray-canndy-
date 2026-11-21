@@ -7,27 +7,22 @@
 }
 
 :{$PORT:80} {
-	# 1. VLESS WebSocket
 	handle /vless* {
 		reverse_proxy 127.0.0.1:10000
 	}
 
-	# 2. VLESS HTTPUpgrade
 	handle /vless-hu* {
 		reverse_proxy 127.0.0.1:10001
 	}
 
-	# 3. VMess WebSocket
 	handle /vmess* {
 		reverse_proxy 127.0.0.1:10002
 	}
 
-	# 4. Trojan WebSocket
 	handle /trojan* {
 		reverse_proxy 127.0.0.1:10003
 	}
 
-	# 5. VLESS gRPC (H2C)
 	handle /vless-grpc* {
 		reverse_proxy h2c://127.0.0.1:10004
 	}
