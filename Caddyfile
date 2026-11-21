@@ -1,7 +1,7 @@
 {
 	auto_https off
 	admin off
-	servers {
+	servers :80 {
 		protocols h1 h2c
 	}
 }
