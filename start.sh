@@ -1,16 +1,16 @@
-#!/bin/bash
+#!/bin/sh
 export GOGC=30
 export GOMEMLIMIT=85MiB
 
 UUID="${UUID:-$(cat /proc/sys/kernel/random/uuid)}"
 sed -i "s/UUID_PLACEHOLDER/$UUID/g" /etc/xray/config.json
-echo "Active UUID / Trojan Password: $UUID"
+echo "=== Active UUID / Trojan Password: $UUID ==="
 
-/usr/local/bin/xray run -config /etc/xray/config.json >/var/log/xray.log 2>&1 &
-GOMEMLIMIT=40MiB /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/var/log/caddy.log 2>&1 &
+/usr/local/bin/xray run -config /etc/xray/config.json &
 
 if [ -n "$CF_TOKEN" ]; then
-    /usr/local/bin/cloudflared tunnel --no-autoupdate run --token "$CF_TOKEN" >/var/log/cloudflared.log 2>&1 &
+    /usr/local/bin/cloudflared tunnel --no-autoupdate run --token "$CF_TOKEN" &
 fi
 
-tail -f /dev/null
+export GOMEMLIMIT=40MiB
+exec /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
