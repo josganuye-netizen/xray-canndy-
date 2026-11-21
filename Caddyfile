@@ -1,12 +1,12 @@
 {
 	auto_https off
 	admin off
-	servers :80 {
+	servers {
 		protocols h1 h2c
 	}
 }
 
-:80 {
+:{$PORT:80} {
 	# 1. VLESS WebSocket
 	handle /vless* {
 		reverse_proxy 127.0.0.1:10000
