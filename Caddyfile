@@ -1,0 +1,21 @@
+{
+	auto_https off
+	admin off
+	servers :80 {
+		protocols h1 h2c
+	}
+}
+
+:80 {
+	handle /vless* {
+		reverse_proxy 127.0.0.1:10000
+	}
+
+	handle /vless-hu* {
+		reverse_proxy 127.0.0.1:10001
+	}
+
+	handle {
+		respond "OK" 200
+	}
+}
