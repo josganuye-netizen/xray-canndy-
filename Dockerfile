@@ -18,11 +18,13 @@ RUN curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /us
 RUN curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared
 
-RUN mkdir -p /etc/xray /etc/caddy /var/log/xray /var/log/caddy
+RUN mkdir -p /etc/xray /etc/caddy
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY config.json /etc/xray/config.json
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
 
-CMD ["/start.sh"]
+RUN sed -i 's/\r$//' /start.sh /etc/caddy/Caddyfile /etc/xray/config.json \
+    && chmod +x /start.sh
+
+CMD ["bash", "/start.sh"]
