@@ -31,12 +31,14 @@ def pick_target(header_bytes):
             return target
     return DEFAULT_TARGET
 
-def is_plain_browser_http(chunk):
+def is_plain_root_probe(chunk):
     text = chunk.decode("latin1", errors="ignore").lower()
     has_tunnel_path = any(p in text for p in ROUTES.keys())
-    has_upgrade = "upgrade:" in text
-    is_http_req = text.startswith(("get ", "head ", "post ", "options "))
-    return is_http_req and not has_tunnel_path and not has_upgrade
+    has_upgrade = "upgrade:" in text or "connection: upgrade" in text
+    lines = text.splitlines()
+    first_line = lines[0].strip() if lines else ""
+    is_root_get = first_line.startswith(("get / http/", "head / http/"))
+    return is_root_get and not has_tunnel_path and not has_upgrade
 
 async def handle_client(client_reader, client_writer):
     try:
@@ -45,7 +47,7 @@ async def handle_client(client_reader, client_writer):
             client_writer.close()
             return
 
-        if is_plain_browser_http(first_chunk):
+        if is_plain_root_probe(first_chunk):
             body = b"OK"
             resp = (
                 b"HTTP/1.1 200 OK\r\n"
@@ -58,7 +60,7 @@ async def handle_client(client_reader, client_writer):
             client_writer.close()
             return
 
-        # Jika payload 2 segmen (misal GET / ... [crlf][crlf] PATCH /trojan ...), baca segmen kedua jika ada
+        # Jika payload 2 segmen (misal GET / ... [crlf][crlf] PATCH /trojan ...), ambil segmen berikutnya jika ada
         if b"\r\n\r\n" in first_chunk and first_chunk.endswith(b"\r\n\r\n"):
             try:
                 second_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=1.5)
@@ -70,13 +72,16 @@ async def handle_client(client_reader, client_writer):
         host, port = pick_target(first_chunk)
         remote_reader, remote_writer = await asyncio.open_connection(host, port)
 
-        lines = first_chunk.split(b"\r\n")
-        if lines and b"HTTP/" in lines[0]:
-            parts = lines[0].split(b" ")
-            if len(parts) >= 3 and parts[0] != b"GET":
-                parts[0] = b"GET"
-                lines[0] = b" ".join(parts)
-            first_chunk = b"\r\n".join(lines)
+        # Normalisasi baris pertama hanya jika bukan HTTPUpgrade agar header HTTPUpgrade tidak rusak
+        lower_chunk = first_chunk.lower()
+        if b"upgrade:" in lower_chunk:
+            lines = first_chunk.split(b"\r\n")
+            if lines and b"HTTP/" in lines[0]:
+                parts = lines[0].split(b" ")
+                if len(parts) >= 3 and parts[0] != b"GET":
+                    parts[0] = b"GET"
+                    lines[0] = b" ".join(parts)
+                first_chunk = b"\r\n".join(lines)
 
         remote_writer.write(first_chunk)
         await remote_writer.drain()
