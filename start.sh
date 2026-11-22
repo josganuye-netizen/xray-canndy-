@@ -14,4 +14,8 @@ sed -i "s/UUID_PLACEHOLDER/$UUID/g" /etc/xray/config.json
 echo "=== STARTING XRAY & CADDY | PORT=$PORT | UUID=$UUID ==="
 
 GOMEMLIMIT=40MiB /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/var/log/caddy.log 2>&1 &
+if [ -n "$CF_TOKEN" ] && ! pgrep -x cloudflared >/dev/null 2>&1; then
+    /usr/local/bin/cloudflared tunnel --no-autoupdate run --token "$CF_TOKEN" >/var/log/cloudflared.log 2>&1 &
+fi
+
 exec /usr/local/bin/xray run -config /etc/xray/config.json
