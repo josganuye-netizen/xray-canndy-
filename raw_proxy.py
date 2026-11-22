@@ -47,7 +47,14 @@ async def handle_client(client_reader, client_writer):
             client_writer.close()
             return
 
-        if is_plain_root_probe(first_chunk):
+        second_chunk = b""
+        if b"\r\n\r\n" in first_chunk and first_chunk.endswith(b"\r\n\r\n"):
+            try:
+                second_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=1.5)
+            except asyncio.TimeoutError:
+                second_chunk = b""
+
+        if is_plain_root_probe(first_chunk) and not second_chunk:
             body = b"OK"
             resp = (
                 b"HTTP/1.1 200 OK\r\n"
@@ -60,30 +67,21 @@ async def handle_client(client_reader, client_writer):
             client_writer.close()
             return
 
-        # Jika payload 2 segmen (misal GET / ... [crlf][crlf] PATCH /trojan ...), ambil segmen berikutnya jika ada
-        if b"\r\n\r\n" in first_chunk and first_chunk.endswith(b"\r\n\r\n"):
-            try:
-                second_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=1.5)
-                if second_chunk:
-                    first_chunk = second_chunk
-            except asyncio.TimeoutError:
-                pass
-
-        host, port = pick_target(first_chunk)
+        active_chunk = second_chunk if second_chunk else first_chunk
+        host, port = pick_target(active_chunk)
         remote_reader, remote_writer = await asyncio.open_connection(host, port)
 
-        # Normalisasi baris pertama hanya jika bukan HTTPUpgrade agar header HTTPUpgrade tidak rusak
-        lower_chunk = first_chunk.lower()
+        lower_chunk = active_chunk.lower()
         if b"upgrade:" in lower_chunk:
-            lines = first_chunk.split(b"\r\n")
+            lines = active_chunk.split(b"\r\n")
             if lines and b"HTTP/" in lines[0]:
                 parts = lines[0].split(b" ")
                 if len(parts) >= 3 and parts[0] != b"GET":
                     parts[0] = b"GET"
                     lines[0] = b" ".join(parts)
-                first_chunk = b"\r\n".join(lines)
+                active_chunk = b"\r\n".join(lines)
 
-        remote_writer.write(first_chunk)
+        remote_writer.write(active_chunk)
         await remote_writer.drain()
 
         await asyncio.gather(
@@ -103,15 +101,16 @@ async def main():
         ports.add(int(env_port))
 
     servers = []
-    for p in ports:
+    for p in sorted(ports):
         try:
             srv = await asyncio.start_server(handle_client, "0.0.0.0", p)
             servers.append(srv)
-            print(f"Raw proxy listening on 0.0.0.0:{p}")
+            print(f"Raw proxy listening on 0.0.0.0:{p}", flush=True)
         except Exception as e:
-            print(f"Skip port {p}: {e}")
+            print(f"Skip port {p}: {e}", flush=True)
 
-    await asyncio.gather(*(s.serve_forever() for s in servers))
+    if servers:
+        await asyncio.gather(*(s.serve_forever() for s in servers))
 
 if __name__ == "__main__":
     asyncio.run(main())
