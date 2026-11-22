@@ -1,4 +1,4 @@
-import asyncio, os, re
+import asyncio, os
 
 ROUTES = {
     "/trojan": ("127.0.0.1", 10003),
@@ -31,6 +31,13 @@ def pick_target(header_bytes):
             return target
     return DEFAULT_TARGET
 
+def is_plain_browser_http(chunk):
+    text = chunk.decode("latin1", errors="ignore").lower()
+    has_tunnel_path = any(p in text for p in ROUTES.keys())
+    has_upgrade = "upgrade:" in text
+    is_http_req = text.startswith(("get ", "head ", "post ", "options "))
+    return is_http_req and not has_tunnel_path and not has_upgrade
+
 async def handle_client(client_reader, client_writer):
     try:
         first_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=10)
@@ -38,7 +45,20 @@ async def handle_client(client_reader, client_writer):
             client_writer.close()
             return
 
-        # Jika payload 2 segmen (misal GET / ... [crlf][crlf] PATCH /trojan ...), baca segmen kedua jika belum terbaca
+        if is_plain_browser_http(first_chunk):
+            body = b"OK"
+            resp = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: text/plain; charset=utf-8\r\n"
+                b"Content-Length: 2\r\n"
+                b"Connection: close\r\n\r\n" + body
+            )
+            client_writer.write(resp)
+            await client_writer.drain()
+            client_writer.close()
+            return
+
+        # Jika payload 2 segmen (misal GET / ... [crlf][crlf] PATCH /trojan ...), baca segmen kedua jika ada
         if b"\r\n\r\n" in first_chunk and first_chunk.endswith(b"\r\n\r\n"):
             try:
                 second_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=1.5)
@@ -50,7 +70,6 @@ async def handle_client(client_reader, client_writer):
         host, port = pick_target(first_chunk)
         remote_reader, remote_writer = await asyncio.open_connection(host, port)
 
-        # Normalisasi baris pertama HTTP agar Xray WS selalu menerima metode GET standar
         lines = first_chunk.split(b"\r\n")
         if lines and b"HTTP/" in lines[0]:
             parts = lines[0].split(b" ")
